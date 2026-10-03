@@ -21,10 +21,12 @@ class TokenManager
         array $allowedIps = [],
         array $allowedHosts = [],
         ?string $expiresAt = null,
+        ?string $baleId = null,
     ): array {
         $plain = config('api.token.prefix', 'rkc_').Str::random(40);
 
         $model = ApiToken::create([
+            'bale_id' => $baleId,
             'name' => $name,
             'token' => $this->hashToken($plain),
             'abilities' => $abilities,

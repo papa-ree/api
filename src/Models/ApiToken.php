@@ -3,10 +3,12 @@
 namespace Bale\Api\Models;
 
 use Bale\Api\Services\TokenManager;
+use Bale\Cms\Models\BaleList;
 use Illuminate\Auth\Authenticatable;
 use Illuminate\Contracts\Auth\Authenticatable as AuthenticatableContract;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Symfony\Component\HttpFoundation\IpUtils;
 
 class ApiToken extends Model implements AuthenticatableContract
@@ -17,6 +19,7 @@ class ApiToken extends Model implements AuthenticatableContract
     protected $table = 'api_tokens';
 
     protected $fillable = [
+        'bale_id',
         'name',
         'token',
         'abilities',
@@ -35,6 +38,22 @@ class ApiToken extends Model implements AuthenticatableContract
         'last_used_at' => 'datetime',
         'revoked_at' => 'datetime',
     ];
+
+    /**
+     * Organisasi penyewa pemilik token.
+     *
+     * ⚠️ NULLABLE dengan sengaja. Token yang sudah ada sebelum kolom ini
+     * ditambahkan tidak punya pemilik, dan memaksa semuanya terisi sekarang
+     * akan mengunci lumbung API yang sedang berjalan.
+     *
+     * Token tanpa `bale_id` berarti "dipakai oleh siapa tidak diketahui".
+     * Consumer yang butuh scoping (seperti ingest naskah) TIDAK BOLEH menebak
+     * dari situ - caller wajib mengirim `bale_id` eksplisit.
+     */
+    public function baleList(): BelongsTo
+    {
+        return $this->belongsTo(BaleList::class, 'bale_id');
+    }
 
     public function isRevoked(): bool
     {
