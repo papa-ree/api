@@ -84,6 +84,8 @@ class Form extends Component
                 'revoked_at' => $this->revoked ? now() : null,
             ]);
 
+            app(TokenManager::class)->logEvent($token, 'updated');
+
             $this->dispatch('toast', message: 'Token updated successfully.', type: 'success');
             $this->redirectRoute('api.tokens.index', navigate: true);
 
@@ -104,6 +106,21 @@ class Form extends Component
 
         $this->reset('name', 'abilities', 'allowedIps', 'allowedHosts', 'expiresAt');
         $this->dispatch('toast', message: 'Token created. Copy the plain token now — it will not be shown again.', type: 'success');
+    }
+
+    public function regenerateToken(): void
+    {
+        if (! $this->tokenId) {
+            return;
+        }
+
+        $token = ApiToken::query()->findOrFail($this->tokenId);
+        $plain = app(TokenManager::class)->regenerate($token);
+
+        $this->plainToken = $plain;
+        $this->revoked = false;
+
+        $this->dispatch('toast', message: 'Token regenerated. Copy the new plain token now — the old one is no longer valid.', type: 'success');
     }
 
     public function render()

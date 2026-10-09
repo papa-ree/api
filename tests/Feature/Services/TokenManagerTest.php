@@ -4,6 +4,7 @@ use Bale\Api\Models\ApiToken;
 use Bale\Api\Services\TokenManager;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use LogicException;
 
 test('issue returns the plain token once and stores only its hash', function () {
     $manager = app(TokenManager::class);
@@ -103,4 +104,61 @@ test('hashToken is deterministic and uses the configured algorithm', function ()
 
     expect($manager->hashToken('abc'))->toBe(hash('sha256', 'abc'))
         ->and($manager->hashToken('abc'))->toBe($manager->hashToken('abc'));
+});
+
+test('regenerate keeps the same row but rotates the secret', function () {
+    $manager = app(TokenManager::class);
+    $issued = $manager->issue('Client', ['api.read']);
+
+    $oldHash = $issued['model']->token;
+    $newPlain = $manager->regenerate($issued['model']);
+
+    expect($newPlain)->toStartWith('rkc_')
+        ->and(Str::length($newPlain))->toBe(44)
+        ->and($newPlain)->not->toBe($issued['plain'])
+        ->and($issued['model']->token)->not->toBe($oldHash)
+        ->and($issued['model']->token)->toBe($manager->hashToken($newPlain));
+
+    $fresh = $issued['model']->fresh();
+
+    expect($fresh->getKey())->toBe($issued['model']->getKey())
+        ->and($fresh->abilities)->toBe(['api.read'])
+        ->and($fresh->isValid())->toBeTrue()
+        ->and($manager->resolve($issued['plain']))->toBeNull()
+        ->and($manager->resolve($newPlain))->toBeInstanceOf(ApiToken::class);
+});
+
+test('regenerate rejects a revoked token', function () {
+    $manager = app(TokenManager::class);
+    $issued = $manager->issue('Client');
+
+    $manager->revoke($issued['model']);
+
+    expect(fn () => $manager->regenerate($issued['model']))->toThrow(LogicException::class);
+});
+
+test('issue, regenerate, and revoke write api.token activity entries', function () {
+    $manager = app(TokenManager::class);
+    $activityModel = config('activitylog.activity_model');
+
+    $issued = $manager->issue('Audit Client', ['api.read']);
+    $manager->regenerate($issued['model']);
+    $manager->revoke($issued['model']);
+
+    $logs = $activityModel::query()
+        ->where('subject_type', $issued['model']->getMorphClass())
+        ->where('subject_id', $issued['model']->getKey())
+        ->orderBy('id')
+        ->get();
+
+    expect($logs)->toHaveCount(3)
+        ->and($logs->pluck('event')->all())->toBe(['created', 'regenerated', 'revoked'])
+        ->and($logs->pluck('log_name')->unique()->values()->all())->toBe(['api.token']);
+
+    $created = $logs->firstWhere('event', 'created');
+
+    expect($created->causer_type)->toBeNull()
+        ->and($created->properties->get('name'))->toBe('Audit Client')
+        ->and($created->properties->get('logged_by'))->toBe('system')
+        ->and($created->properties->get('tenant_name'))->toBe('system');
 });

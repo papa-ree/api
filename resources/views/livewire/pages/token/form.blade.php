@@ -4,7 +4,7 @@
         :subtitle="__('Manage token name, permissions, and hardening rules')"
     />
 
-    {{-- Plain token shown only once, right after creation --}}
+    {{-- Plain token shown only once, right after creation or regeneration --}}
     @if($plainToken)
         <div class="max-w-3xl mx-auto mt-6">
             <div class="rounded-2xl border border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-900/20 p-5">
@@ -107,4 +107,23 @@
             </div>
         </div>
     </form>
+
+    {{-- Regenerate (edit only) --}}
+    @if($tokenId && ! $revoked)
+        <div class="max-w-3xl mx-auto mt-6">
+            <div class="rounded-2xl border border-red-200 dark:border-red-800/60 bg-red-50 dark:bg-red-900/10 p-5">
+                <div class="flex items-center justify-between gap-4 flex-wrap">
+                    <div>
+                        <h3 class="text-sm font-bold text-red-700 dark:text-red-400">{{ __('Regenerate Token') }}</h3>
+                        <p class="text-xs text-red-600 dark:text-red-400/80 mt-1">
+                            {{ __('Issues a new secret for this token. The current secret stops working immediately; id, permissions, and hardening rules are kept.') }}
+                        </p>
+                    </div>
+                    <x-core::button variant="danger" wire:click="regenerateToken" spinner="regenerateToken"
+                        wire:confirm="{{ __('Regenerate this token? Any client using the current secret must be updated.') }}"
+                        :label="__('Regenerate Token')" />
+                </div>
+            </div>
+        </div>
+    @endif
 </div>

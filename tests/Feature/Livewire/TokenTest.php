@@ -106,3 +106,58 @@ it('revoke tanpa permission api-token.revoke ditolak 403', function () {
 
     expect($issued['model']->fresh()->isRevoked())->toBeFalse();
 });
+
+it('regenerate token via form mengganti secret dan mencatat log', function () {
+    $user = apiTokenUser(['api-token.read', 'api-token.update']);
+
+    $issued = app(TokenManager::class)->issue('Rotasi', ['api.read']);
+    $oldPlain = $issued['plain'];
+
+    Livewire::actingAs($user)
+        ->test(Form::class, ['id' => $issued['model']->id])
+        ->assertSet('plainToken', null)
+        ->call('regenerateToken')
+        ->assertHasNoErrors()
+        ->assertSet('plainToken', fn ($value) => is_string($value) && str_starts_with($value, 'rkc_'))
+        ->assertSet('revoked', false);
+
+    $model = $issued['model']->fresh();
+
+    expect($model->isValid())->toBeTrue()
+        ->and($model->token)->not->toBe(app(TokenManager::class)->hashToken($oldPlain))
+        ->and(app(TokenManager::class)->resolve($oldPlain))->toBeNull();
+
+    $activityModel = config('activitylog.activity_model');
+    $log = $activityModel::query()
+        ->where('subject_id', $issued['model']->id)
+        ->where('subject_type', ApiToken::class)
+        ->where('event', 'regenerated')
+        ->firstOrFail();
+
+    expect($log->causer_type)->toBe(User::class)
+        ->and($log->causer_id)->toBe($user->id)
+        ->and($log->log_name)->toBe('api.token')
+        ->and($log->properties->get('logged_by'))->toBe('user');
+});
+
+it('edit token via form mencatat event updated pada activity log', function () {
+    $user = apiTokenUser(['api-token.read', 'api-token.update']);
+
+    $issued = app(TokenManager::class)->issue('Nama Awal', ['api.read']);
+
+    Livewire::actingAs($user)
+        ->test(Form::class, ['id' => $issued['model']->id])
+        ->set('name', 'Nama Baru')
+        ->call('save')
+        ->assertHasNoErrors();
+
+    $activityModel = config('activitylog.activity_model');
+    $log = $activityModel::query()
+        ->where('subject_id', $issued['model']->id)
+        ->where('subject_type', ApiToken::class)
+        ->where('event', 'updated')
+        ->firstOrFail();
+
+    expect($log->causer_id)->toBe($user->id)
+        ->and($log->properties->get('name'))->toBe('Nama Baru');
+});
