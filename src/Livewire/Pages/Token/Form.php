@@ -32,20 +32,22 @@ class Form extends Component
 
     public ?string $plainToken = null;
 
-    public function mount(?string $id = null): void
+    public function mount(?string $token = null, ?string $id = null): void
     {
+        $resolvedId = $token ?? $id;
+
         $this->abilityGroups = app(ApiScopeRegistry::class)->grouped();
 
-        if ($id) {
-            $this->tokenId = $id;
-            $token = ApiToken::query()->findOrFail($id);
+        if ($resolvedId) {
+            $this->tokenId = $resolvedId;
+            $tokenModel = ApiToken::query()->findOrFail($resolvedId);
 
-            $this->name = $token->name;
-            $this->abilities = $token->abilities ?? [];
-            $this->allowedIps = $this->formatLines($token->allowed_ips ?? []);
-            $this->allowedHosts = $this->formatLines($token->allowed_hosts ?? []);
-            $this->expiresAt = $token->expires_at?->toDateString();
-            $this->revoked = $token->isRevoked();
+            $this->name = $tokenModel->name;
+            $this->abilities = $tokenModel->abilities ?? [];
+            $this->allowedIps = $this->formatLines($tokenModel->allowed_ips ?? []);
+            $this->allowedHosts = $this->formatLines($tokenModel->allowed_hosts ?? []);
+            $this->expiresAt = $tokenModel->expires_at?->toDateString();
+            $this->revoked = $tokenModel->isRevoked();
         }
     }
 
